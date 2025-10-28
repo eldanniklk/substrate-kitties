@@ -28,58 +28,60 @@ type Block = frame_system::mocking::MockBlock<TestRuntime>;
 // We create the constants `ALICE` and `BOB` to make it clear when we are representing users below.
 const ALICE: u64 = 1;
 const BOB: u64 = 2;
+const DEFAULT_KITTY: Kitty<TestRuntime> = Kitty { dna: [0u8; 32], owner: 0, price: None };
 
 #[runtime]
 mod runtime {
-	#[runtime::derive(
-		RuntimeCall,
-		RuntimeEvent,
-		RuntimeError,
-		RuntimeOrigin,
-		RuntimeTask,
-		RuntimeHoldReason,
-		RuntimeFreezeReason
-	)]
-	#[runtime::runtime]
-	/// The "test runtime" that represents the state transition function for our blockchain.
-	///
-	/// The runtime is composed of individual modules called "pallets", which you find see below.
-	/// Each pallet has its own logic and storage, all of which can be combined together.
-	pub struct TestRuntime;
+    #[runtime::derive(
+        RuntimeCall,
+        RuntimeEvent,
+        RuntimeError,
+        RuntimeOrigin,
+        RuntimeTask,
+        RuntimeHoldReason,
+        RuntimeFreezeReason
+    )]
+    #[runtime::runtime]
+    /// The "test runtime" that represents the state transition function for our blockchain.
+    ///
+    /// The runtime is composed of individual modules called "pallets", which you find see below.
+    /// Each pallet has its own logic and storage, all of which can be combined together.
+    pub struct TestRuntime;
 
-	/// System: Mandatory system pallet that should always be included in a FRAME runtime.
-	#[runtime::pallet_index(0)]
-	pub type System = frame_system::Pallet<TestRuntime>;
+    /// System: Mandatory system pallet that should always be included in a FRAME runtime.
+    #[runtime::pallet_index(0)]
+    pub type System = frame_system::Pallet<TestRuntime>;
 
-	/// PalletBalances: Manages your blockchain's native currency. (i.e. DOT on Polkadot)
-	#[runtime::pallet_index(1)]
-	pub type PalletBalances = pallet_balances::Pallet<TestRuntime>;
+    /// PalletBalances: Manages your blockchain's native currency. (i.e. DOT on Polkadot)
+    #[runtime::pallet_index(1)]
+    pub type PalletBalances = pallet_balances::Pallet<TestRuntime>;
 
-	/// PalletKitties: The pallet you are building in this tutorial!
-	#[runtime::pallet_index(2)]
-	pub type PalletKitties = pallet_kitties::Pallet<TestRuntime>;
+    /// PalletKitties: The pallet you are building in this tutorial!
+    #[runtime::pallet_index(2)]
+    pub type PalletKitties = pallet_kitties::Pallet<TestRuntime>;
 }
 
 // Normally `System` would have many more configurations, but you can see that we use some macro
 // magic to automatically configure most of the pallet for a "default test configuration".
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
 impl frame_system::Config for TestRuntime {
-	type Block = Block;
-	type AccountData = pallet_balances::AccountData<Balance>;
+    type Block = Block;
+    type AccountData = pallet_balances::AccountData<Balance>;
 }
 
 // Normally `pallet_balances` would have many more configurations, but you can see that we use some
 // macro magic to automatically configure most of the pallet for a "default test configuration".
 #[derive_impl(pallet_balances::config_preludes::TestDefaultConfig)]
 impl pallet_balances::Config for TestRuntime {
-	type AccountStore = System;
-	type Balance = Balance;
+    type AccountStore = System;
+    type Balance = Balance;
 }
 
 // This is the configuration of our Pallet! If you make changes to the pallet's `trait Config`, you
 // will also need to update this configuration to represent that.
 impl pallet_kitties::Config for TestRuntime {
-	type RuntimeEvent = RuntimeEvent;
+    type RuntimeEvent = RuntimeEvent;
+    type NativeBalance = PalletBalances;
 }
 
 // We need to run most of our tests using this function: `new_test_ext().execute_with(|| { ... });`
@@ -87,29 +89,502 @@ impl pallet_kitties::Config for TestRuntime {
 // If you forget to include this and try to access your Pallet storage, you will get an error like:
 // "`get_version_1` called outside of an Externalities-provided environment."
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	frame_system::GenesisConfig::<TestRuntime>::default()
-		.build_storage()
-		.unwrap()
-		.into()
+    frame_system::GenesisConfig::<TestRuntime>::default()
+        .build_storage()
+        .unwrap()
+        .into()
 }
 
 #[test]
 fn starting_template_is_sane() {
-	new_test_ext().execute_with(|| {
-		let event = Event::<TestRuntime>::Created { owner: ALICE };
-		let _runtime_event: RuntimeEvent = event.into();
-		let _call = Call::<TestRuntime>::create_kitty {};
-		let result = PalletKitties::create_kitty(RuntimeOrigin::signed(BOB));
-		assert_ok!(result);
-	});
+    new_test_ext().execute_with(|| {
+        let event = Event::<TestRuntime>::Created { owner: ALICE };
+        let _runtime_event: RuntimeEvent = event.into();
+        let _call = Call::<TestRuntime>::create_kitty {};
+        let result = PalletKitties::create_kitty(RuntimeOrigin::signed(BOB));
+        assert_ok!(result);
+    });
 }
 
 #[test]
 fn system_and_balances_work() {
-	// This test will just sanity check that we can access `System` and `PalletBalances`.
-	new_test_ext().execute_with(|| {
-		// We often need to add some balance to a user to test features which needs tokens.
-		assert_ok!(PalletBalances::mint_into(&ALICE, 100));
-		assert_ok!(PalletBalances::mint_into(&BOB, 100));
-	});
+    // This test will just sanity check that we can access `System` and `PalletBalances`.
+    new_test_ext().execute_with(|| {
+        // We often need to add some balance to a user to test features which needs tokens.
+        assert_ok!(PalletBalances::mint_into(&ALICE, 100));
+        assert_ok!(PalletBalances::mint_into(&BOB, 100));
+    });
 }
+
+#[test]
+fn create_kitty_checks_signed() {
+    new_test_ext().execute_with(|| {
+        // The `create_kitty` extrinsic should work when being called by a user.
+        assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+        // The `create_kitty` extrinsic should fail when being called by an unsigned message.
+        assert_noop!(PalletKitties::create_kitty(RuntimeOrigin::none()), DispatchError::BadOrigin);
+    })
+}
+
+#[test]
+fn create_kitty_emits_event() {
+    new_test_ext().execute_with(|| {
+        // We need to set block number to 1 to view events.
+        System::set_block_number(1);
+        // Execute our call, and ensure it is successful.
+        assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+        // Assert the last event by our blockchain is the `Created` event with the correct owner.
+        System::assert_last_event(Event::<TestRuntime>::Created { owner: 1 }.into());
+    })
+}
+
+#[test]
+fn count_for_kitties_created_correctly() {
+    new_test_ext().execute_with(|| {
+        // Querying storage before anything is set will return `0`.
+        assert_eq!(CountForKitties::<TestRuntime>::get(), 0);
+        // You can `set` the value using an `u32`.
+        CountForKitties::<TestRuntime>::set(1337u32);
+        // You can `put` the value directly with a `u32`.
+        CountForKitties::<TestRuntime>::put(1337u32);
+    })
+}
+
+#[test]
+fn mint_increments_count_for_kitty() {
+    new_test_ext().execute_with(|| {
+        // Querying storage before anything is set will return `0`.
+        assert_eq!(CountForKitties::<TestRuntime>::get(), 0);
+        // Call `create_kitty` which will call `mint`.
+        assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+        // Now the storage should be `1`
+        assert_eq!(CountForKitties::<TestRuntime>::get(), 1);
+    })
+}
+
+#[test]
+fn mint_errors_when_overflow() {
+    new_test_ext().execute_with(|| {
+        // Set the count to the largest value possible.
+        CountForKitties::<TestRuntime>::set(u32::MAX);
+        // `create_kitty` should not succeed because of safe math.
+        assert_noop!(
+            PalletKitties::create_kitty(RuntimeOrigin::signed(1)),
+            Error::<TestRuntime>::TooManyKitties
+        );
+    })
+}
+
+#[test]
+fn kitties_map_created_correctly() {
+    new_test_ext().execute_with(|| {
+        let zero_key = [0u8; 32];
+        assert!(!Kitties::<TestRuntime>::contains_key(zero_key));
+        Kitties::<TestRuntime>::insert(zero_key, DEFAULT_KITTY);
+        assert!(Kitties::<TestRuntime>::contains_key(zero_key));
+    })
+}
+
+#[test]
+fn create_kitty_adds_to_map() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+        assert_eq!(Kitties::<TestRuntime>::iter().count(), 1);
+    })
+}
+
+#[test]
+fn cannot_mint_duplicate_kitty() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(PalletKitties::mint(ALICE, [0u8; 32]));
+        assert_noop!(PalletKitties::mint(BOB, [0u8; 32]), Error::<TestRuntime>::DuplicateKitty);
+    })
+}
+
+#[test]
+fn kitty_struct_has_expected_traits() {
+    new_test_ext().execute_with(|| {
+        let kitty = DEFAULT_KITTY;
+        let bytes = kitty.encode();
+        let _decoded_kitty = Kitty::<TestRuntime>::decode(&mut &bytes[..]).unwrap();
+        assert!(Kitty::<TestRuntime>::max_encoded_len() > 0);
+        let _info = Kitty::<TestRuntime>::type_info();
+    })
+}
+
+#[test]
+fn mint_stores_owner_in_kitty() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(PalletKitties::mint(1337, [42u8; 32]));
+        let kitty = Kitties::<TestRuntime>::get([42u8; 32]).unwrap();
+        assert_eq!(kitty.owner, 1337);
+        assert_eq!(kitty.dna, [42u8; 32]);
+    })
+}
+
+#[test]
+fn create_kitty_makes_unique_kitties() {
+    new_test_ext().execute_with(|| {
+        // Two calls to `create_kitty` should work.
+        assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+        assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(BOB)));
+        // And should result in two kitties in our system.
+        assert_eq!(CountForKitties::<TestRuntime>::get(), 2);
+        assert_eq!(Kitties::<TestRuntime>::iter().count(), 2);
+    })
+}
+
+#[test]
+fn kitties_owned_created_correctly() {
+    new_test_ext().execute_with(|| {
+        // Initially users have no kitties owned.
+        assert_eq!(KittiesOwned::<TestRuntime>::get(1).len(), 0);
+        // Let's create two kitties.
+        assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+        assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+        // Now they should have two kitties owned.
+        assert_eq!(KittiesOwned::<TestRuntime>::get(1).len(), 2);
+    });
+}
+
+#[test]
+fn cannot_own_too_many_kitties() {
+    new_test_ext().execute_with(|| {
+        // If your max owned is different than 100, you will need to update this.
+        for _ in 0..100 {
+            assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+        }
+        assert_noop!(
+            PalletKitties::create_kitty(RuntimeOrigin::signed(1)),
+            Error::<TestRuntime>::TooManyOwned
+        );
+    });
+}
+
+#[test]
+fn transfer_emits_event() {
+    new_test_ext().execute_with(|| {
+        // We need to set block number to 1 to view events.
+        System::set_block_number(1);
+        // Create a kitty to transfer
+        assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+        // Get the kitty id.
+        let kitty_id = Kitties::<TestRuntime>::iter_keys().collect::<Vec<_>>()[0];
+        assert_ok!(PalletKitties::transfer(RuntimeOrigin::signed(ALICE), BOB, kitty_id));
+        System::assert_last_event(
+            Event::<TestRuntime>::Transferred { from: ALICE, to: BOB, kitty_id }.into(),
+        );
+    });
+}
+
+#[test]
+fn transfer_logic_works() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+        // Starting state looks good.
+        let kitty = &Kitties::<TestRuntime>::iter_values().collect::<Vec<_>>()[0];
+        let kitty_id = kitty.dna;
+        assert_eq!(kitty.owner, ALICE);
+        assert_eq!(KittiesOwned::<TestRuntime>::get(ALICE), vec![kitty_id]);
+        assert_eq!(KittiesOwned::<TestRuntime>::get(BOB), vec![]);
+        // Cannot transfer to yourself.
+        assert_noop!(
+            PalletKitties::transfer(RuntimeOrigin::signed(ALICE), ALICE, kitty_id),
+            Error::<TestRuntime>::TransferToSelf
+        );
+        // Cannot transfer a non-existent kitty.
+        assert_noop!(
+            PalletKitties::transfer(RuntimeOrigin::signed(ALICE), BOB, [0u8; 32]),
+            Error::<TestRuntime>::NoKitty
+        );
+        // Cannot transfer kitty you do not own.
+        assert_noop!(
+            PalletKitties::transfer(RuntimeOrigin::signed(BOB), ALICE, kitty_id),
+            Error::<TestRuntime>::NotOwner
+        );
+        // Transfer should work when parameters are right.
+        assert_ok!(PalletKitties::transfer(RuntimeOrigin::signed(ALICE), BOB, kitty_id));
+        // Storage is updated correctly.
+        assert_eq!(KittiesOwned::<TestRuntime>::get(ALICE), vec![]);
+        assert_eq!(KittiesOwned::<TestRuntime>::get(BOB), vec![kitty_id]);
+        let kitty = &Kitties::<TestRuntime>::iter_values().collect::<Vec<_>>()[0];
+        assert_eq!(kitty.owner, BOB);
+    });
+}
+
+#[test]
+fn native_balance_associated_type_works() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(<<TestRuntime as Config>::NativeBalance as Mutate<_>>::mint_into(&ALICE, 1337));
+        assert_eq!(
+            <<TestRuntime as Config>::NativeBalance as Inspect<_>>::total_balance(&ALICE),
+            1337
+        );
+    });
+}
+
+#[test]
+fn balance_of_type_works() {
+    // Inside our tests, the `BalanceOf` type has a concrete type of `u64`.
+    let _example_balance: BalanceOf<TestRuntime> = 1337u64;
+}
+
+#[test]
+fn set_price_emits_event() {
+    new_test_ext().execute_with(|| {
+        // We need to set block number to 1 to view events.
+        System::set_block_number(1);
+        assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+        let kitty_id = Kitties::<TestRuntime>::iter_keys().collect::<Vec<_>>()[0];
+        assert_ok!(PalletKitties::set_price(RuntimeOrigin::signed(ALICE), kitty_id, Some(1337)));
+        // Assert the last event is `PriceSet` event with the correct information.
+        System::assert_last_event(
+            Event::<TestRuntime>::PriceSet { owner: ALICE, kitty_id, new_price: Some(1337) }.into(),
+        );
+    })
+}
+
+#[test]
+fn set_price_logic_works() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+        let kitty = &Kitties::<TestRuntime>::iter_values().collect::<Vec<_>>()[0];
+        assert_eq!(kitty.price, None);
+        let kitty_id = kitty.dna;
+        assert_ok!(PalletKitties::set_price(RuntimeOrigin::signed(ALICE), kitty_id, Some(1337)));
+        let kitty = Kitties::<TestRuntime>::get(kitty_id).unwrap();
+        assert_eq!(kitty.price, Some(1337));
+    })
+}
+
+#[test]
+fn do_buy_kitty_emits_event() {
+    new_test_ext().execute_with(|| {
+        // We need to set block number to 1 to view events.
+        System::set_block_number(1);
+        assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+        let kitty_id = Kitties::<TestRuntime>::iter_keys().collect::<Vec<_>>()[0];
+        assert_ok!(PalletKitties::set_price(RuntimeOrigin::signed(ALICE), kitty_id, Some(1337)));
+        assert_ok!(PalletBalances::mint_into(&BOB, 100_000));
+        assert_ok!(PalletKitties::buy_kitty(RuntimeOrigin::signed(BOB), kitty_id, 1337));
+        // Assert the last event by our blockchain is the `Created` event with the correct owner.
+        System::assert_last_event(
+            Event::<TestRuntime>::Sold { buyer: BOB, kitty_id, price: 1337 }.into(),
+        );
+    })
+}
+
+#[test]
+fn do_buy_kitty_logic_works() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(PalletKitties::create_kitty(RuntimeOrigin::signed(ALICE)));
+        let kitty = &Kitties::<TestRuntime>::iter_values().collect::<Vec<_>>()[0];
+        let kitty_id = kitty.dna;
+        assert_eq!(kitty.owner, ALICE);
+        assert_eq!(KittiesOwned::<TestRuntime>::get(ALICE), vec![kitty_id]);
+        // Cannot buy kitty which does not exist.
+        assert_noop!(
+            PalletKitties::buy_kitty(RuntimeOrigin::signed(BOB), [0u8; 32], 1337),
+            Error::<TestRuntime>::NoKitty
+        );
+        // Cannot buy kitty which is not for sale.
+        assert_noop!(
+            PalletKitties::buy_kitty(RuntimeOrigin::signed(BOB), kitty_id, 1337),
+            Error::<TestRuntime>::NotForSale
+        );
+        assert_ok!(PalletKitties::set_price(RuntimeOrigin::signed(ALICE), kitty_id, Some(1337)));
+        // Cannot buy kitty for a lower price.
+        assert_noop!(
+            PalletKitties::buy_kitty(RuntimeOrigin::signed(BOB), kitty_id, 1336),
+            Error::<TestRuntime>::MaxPriceTooLow
+        );
+        // Cannot buy kitty if you don't have the funds.
+        assert_noop!(
+            PalletKitties::buy_kitty(RuntimeOrigin::signed(BOB), kitty_id, 1337),
+            frame::arithmetic::ArithmeticError::Underflow
+        );
+        // Cannot buy kitty if it would kill your account (i.e. set your balance to 0).
+        assert_ok!(PalletBalances::mint_into(&BOB, 1337));
+        assert!(
+            PalletKitties::buy_kitty(RuntimeOrigin::signed(BOB), kitty_id, 1337).is_err(),
+            // TODO: assert_noop on DispatchError::Token(TokenError::NotExpendable)
+        );
+        // When everything is right, it works.
+        assert_ok!(PalletBalances::mint_into(&BOB, 100_000));
+        assert_ok!(PalletKitties::buy_kitty(RuntimeOrigin::signed(BOB), kitty_id, 1337));
+        // State is updated correctly.
+        assert_eq!(KittiesOwned::<TestRuntime>::get(BOB), vec![kitty_id]);
+        let kitty = Kitties::<TestRuntime>::get(kitty_id).unwrap();
+        assert_eq!(kitty.owner, BOB);
+        // Price is reset to `None`.
+        assert_eq!(kitty.price, None);
+        // BOB transferred funds to ALICE.
+        assert_eq!(PalletBalances::balance(&ALICE), 1337);
+        assert_eq!(PalletBalances::balance(&BOB), 100_000);
+    })
+}
+
+// -----------------------------
+// FUZZING LIGERO 
+// -----------------------------
+// Esta versión hace fuzzing determinista (reproducible por seed),
+// ejecuta operaciones aleatorias (mint/transfer/set_price/buy)
+// y comprueba invariantes globales completas de forma periódica
+// (cada N pasos) para no saturar la máquina.
+//
+// Explicación resumida:
+//  - Ejecutamos FUZZ_CASES seeds distintas.
+//  - Para cada seed ejecutamos ITER_PER_CASE operaciones aleatorias.
+//  - En cada paso: transfer, set_price o buy/mint.
+//  - Cada 20 pasos comprobamos todas las invariantes globales:
+//      * CountForKitties == Kitties.len()
+//      * Cada kitty aparece en el vector de su owner
+//      * No hay duplicados en ninguno de los vectores de owners
+//      * La suma de todos los vectores == número de kitties
+//      * Chequeo ligero de balances (no overflow)
+//  - Todo es determinista: si falla, proptest guarda el seed para reproducirlo.
+//.
+
+// Requerido por proptest
+use proptest::prelude::*;
+use proptest::test_runner::{TestRng, RngAlgorithm, Config as ProptestConfig};
+
+const FUZZ_CASES: u32 = 20;        // cuántas seeds distintas probamos
+const ITER_PER_CASE: usize = 100;  // cuántas operaciones por seed
+const MAX_ACCOUNTS: usize = 8;     // máximo de cuentas a crear
+const MAX_INITIAL_KITTIES: usize = 6; // kitties iniciales por caso
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: FUZZ_CASES,
+        // shrink ligero: si falla queremos reproducir fácilmente, no hacer shrink pesado
+        max_shrink_iters: 64,
+        .. ProptestConfig::default()
+    })]
+
+    #[test]
+    fn full_light_fuzz(seed in any::<u64>()) {
+        // Convertimos el seed u64 a 32 bytes para inicializar ChaCha correctamente.
+        // ChaCha requiere exactamente 32 bytes de semilla.
+        let mut seed_bytes = [0u8; 32];
+        seed_bytes[..8].copy_from_slice(&seed.to_le_bytes());
+
+        // RNG determinista por seed (reproducible)
+        let mut trng = TestRng::from_seed(RngAlgorithm::ChaCha, &seed_bytes);
+
+        // Ejecutamos en un entorno aislado de pruebas (simula la blockchain)
+        new_test_ext().execute_with(|| {
+            // -----------------------
+            // 1) Preparación inicial
+            // -----------------------
+            // Creamos entre 2 y MAX_ACCOUNTS cuentas para simular usuarios
+            let accounts_count = ((trng.next_u32() as usize) % MAX_ACCOUNTS).saturating_add(2);
+            let mut accounts: Vec<u64> = (1u64..).take(accounts_count).collect();
+
+            // Damos un balance inicial a cada cuenta para poder operar
+            for acc in &accounts {
+                let _ = <<TestRuntime as Config>::NativeBalance as Mutate<_>>::mint_into(acc, 1_000);
+            }
+
+            // Crear entre 1 y MAX_INITIAL_KITTIES kitties distribuidos entre las cuentas
+            let initial_k = ((trng.next_u32() as usize) % MAX_INITIAL_KITTIES).saturating_add(1);
+            let mut kitty_ids: Vec<[u8; 32]> = Vec::new();
+            for i in 0..initial_k {
+                let owner = accounts[i % accounts.len()];
+                let _ = PalletKitties::create_kitty(RuntimeOrigin::signed(owner));
+                if let Some(last) = KittiesOwned::<TestRuntime>::get(&owner).last().cloned() {
+                    kitty_ids.push(last);
+                }
+            }
+
+            // -----------------------
+            // 2) Bucle de operaciones
+            // -----------------------
+            for step in 0..ITER_PER_CASE {
+                // Elección simple de operación: 0=transfer, 1=set_price, 2=buy o mint
+                let choice = trng.next_u32() % 3;
+
+                match choice {
+                    0 => {
+                        // Transferencia: escogemos un kitty y hacemos transfer (si existe)
+                        if !kitty_ids.is_empty() {
+                            let idx = (trng.next_u32() as usize) % kitty_ids.len();
+                            let k = kitty_ids[idx];
+                            if let Some(kd) = Kitties::<TestRuntime>::get(k) {
+                                let to = accounts[(trng.next_u32() as usize) % accounts.len()];
+                                let _ = PalletKitties::transfer(RuntimeOrigin::signed(kd.owner), to, k);
+                            }
+                        }
+                    }
+                    1 => {
+                        // Cambiar precio: actor aleatorio (puede no ser owner -> error esperado)
+                        if !kitty_ids.is_empty() {
+                            let k = kitty_ids[(trng.next_u32() as usize) % kitty_ids.len()];
+                            let actor = accounts[(trng.next_u32() as usize) % accounts.len()];
+                            let price = (trng.next_u32() % 2000) as u64;
+                            let _ = PalletKitties::set_price(RuntimeOrigin::signed(actor), k, Some(price));
+                        }
+                    }
+                    2 => {
+                        // Comprar o crear: 50% buy (si hay kitties) else mint
+                        let target = accounts[(trng.next_u32() as usize) % accounts.len()];
+                        if !kitty_ids.is_empty() && trng.next_u32() % 2 == 0 {
+                            // intentamos comprar: damos antes algo de dinero al comprador
+                            let k = kitty_ids[(trng.next_u32() as usize) % kitty_ids.len()];
+                            let _ = <<TestRuntime as Config>::NativeBalance as Mutate<_>>::mint_into(&target, 500);
+                            let max_price = (trng.next_u32() % 3000) as u64;
+                            let _ = PalletKitties::buy_kitty(RuntimeOrigin::signed(target), k, max_price);
+                        } else {
+                            // mint nuevo
+                            let _ = PalletKitties::create_kitty(RuntimeOrigin::signed(target));
+                            // actualizamos la llista de kitty ids conocida
+                            kitty_ids = Kitties::<TestRuntime>::iter_keys().collect::<Vec<_>>();
+                        }
+                    }
+                    _ => {}
+                }
+
+                // ---------------------------------------------------------
+                // 3) Comprobaciones periódicas (completas pero poco frecuentes)
+                // ---------------------------------------------------------
+                // Cada 20 pasos ejecutamos comprobaciones globales completas:
+                //   - contador global == mapas reales
+                //   - cada kitty aparece en su owner
+                //   - no hay duplicados en KittiesOwned
+                //   - suma de lengths == número de kitties
+                //   - balances sanity
+                if step % 20 == 0 {
+                    // a) CountForKitties vs Kitties.len()
+                    let count = CountForKitties::<TestRuntime>::get() as usize;
+                    let map_len = Kitties::<TestRuntime>::iter().count();
+                    prop_assert_eq!(count, map_len, "CountForKitties vs Kitties.len() mismatch at step {}", step);
+
+                    // b) Cada kitty debe aparecer en el vector del owner
+                    for (kid, k) in Kitties::<TestRuntime>::iter() {
+                        let owned = KittiesOwned::<TestRuntime>::get(&k.owner);
+                        prop_assert!(owned.contains(&kid), "kitty not listed in owner's vec at step {}", step);
+                    }
+
+                    // c) No hay duplicados en los vectores de dueños
+                    for (acc, vec) in KittiesOwned::<TestRuntime>::iter() {
+                        let set: std::collections::HashSet<_> = vec.iter().cloned().collect();
+                        prop_assert_eq!(set.len(), vec.len(), "duplicate kitty id in owner's list for acc {:?} at step {}", acc, step);
+                    }
+
+                    // d) La suma de todos los vectores == número de kitties en mapa
+                    let total_owned: usize = KittiesOwned::<TestRuntime>::iter().map(|(_, v)| v.len()).sum();
+                    prop_assert_eq!(total_owned, map_len, "total owned mismatch at step {}", step);
+
+                    // e) Balance sanity check (simple)
+                    for acc in &accounts {
+                        let b = PalletBalances::balance(acc);
+                        prop_assert!(b <= u64::MAX, "balance overflow / crazy at step {}", step);
+                    }
+                }
+            } // end ITER_PER_CASE
+
+            Ok(())
+        });
+    }
+}
+

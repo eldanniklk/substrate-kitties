@@ -19,6 +19,7 @@ frame = { version = "0.7.0", package = "polkadot-sdk-frame", default-features = 
 [dev-dependencies]
 frame-system = { version = "38.0.0" }
 pallet-balances = { version = "39.0.0" }
+proptest = "1.0"
 
 [features]
 default = [ "std" ]

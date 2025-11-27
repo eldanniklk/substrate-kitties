@@ -1,10 +1,10 @@
-use super::*; // Importa todos los elementos del módulo principal (pallet, tipos, errores, eventos, etc).
-use frame::prelude::*; // Importa macros, traits y utilidades esenciales de FRAME.
-use frame::primitives::BlakeTwo256; // Función hash Blake2 usada para generar ADN (hash rápido y determinista).
-use frame::traits::tokens::Preservation; // Enum usado para indicar cómo manejar balances (mantener o destruir saldo).
-use frame::traits::Hash; // Trait para usar métodos de hashing genéricos (hash_of).
+use super::*; 
+use frame::prelude::*; 
+use frame::primitives::BlakeTwo256; 
+use frame::traits::tokens::Preservation; 
+use frame::traits::Hash; 
 
-// Implementación interna del pallet: funciones auxiliares (no son extrinsics).
+
 impl<T: Config> Pallet<T> {
 
     // -------------------------------------------------------------------------

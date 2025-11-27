@@ -1,18 +1,17 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-// Si no se compila con la feature "std", usamos "no_std".
-// Esto permite que el pallet funcione dentro del runtime de Substrate (entorno sin librerías estándar de Rust).
 
-mod impls; // Módulo donde estarán las funciones internas y la lógica de implementación (mint, transfer, etc).
-mod tests; // Módulo donde se definen los tests unitarios y fuzzing de este pallet.
 
-use frame::prelude::*; // Importa macros y tipos base de FRAME (sistema de pallets de Substrate).
-use frame::traits::fungible::Inspect; // Trait para inspeccionar balances.
-use frame::traits::fungible::Mutate;  // Trait para modificar balances.
-pub use pallet::*; // Reexporta todo el contenido del módulo pallet para que sea accesible desde fuera.
+mod impls; 
+mod tests; 
+
+use frame::prelude::*;
+use frame::traits::fungible::Inspect; 
+use frame::traits::fungible::Mutate;  
+pub use pallet::*; 
 
 #[frame::pallet(dev_mode)]
 pub mod pallet {
-    use super::*; // Permite usar los imports del nivel superior dentro del módulo.
+    use super::*; 
 
     // --- Declaración principal del pallet ---
     #[pallet::pallet]
